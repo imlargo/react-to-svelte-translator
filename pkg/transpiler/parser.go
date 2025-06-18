@@ -250,34 +250,39 @@ func (t *Transpiler) extractEffects(code string) []EffectDefinition {
 func (t *Transpiler) extractFunctions(code string) []FunctionDefinition {
 	var functions []FunctionDefinition
 
-	// Regex para detectar funciones flecha, con async opcional, parámetros con o sin paréntesis
-	funcRegex := regexp.MustCompile(`const\s+(\w+)\s*=\s*(async\s*)?(?:\([^\)]*\)|\w+)\s*=>\s*{((?:[^{}]*|\{[^{}]*\})*)}`)
+	// Regex: nombre, async?, params, cuerpo (nivel simple)
+	funcRegex := regexp.MustCompile(
+		`const\s+(\w+)\s*=\s*(async\s*)?(\([^\)]*\)|\w+)\s*=>\s*{((?:[^{}]*|\{[^{}]*\})*)}`,
+	)
 
 	matches := funcRegex.FindAllStringSubmatch(code, -1)
-
-	// Obtener el nombre del componente principal para excluirlo
 	componentName := t.extractComponentName(code)
 
 	for _, match := range matches {
-		if len(match) > 3 {
-			funcName := match[1]
-			isAsync := strings.TrimSpace(match[2]) == "async"
-			funcBody := match[3]
-
-			// Excluir componente principal y funciones con hooks
-			if funcName != componentName &&
-				!strings.Contains(funcBody, "useState") &&
-				!strings.Contains(funcBody, "useEffect") {
-
-				cleanBody := t.cleanFunctionBody(funcBody)
-
-				functions = append(functions, FunctionDefinition{
-					Name:  funcName,
-					Body:  cleanBody,
-					Async: isAsync,
-				})
-			}
+		if len(match) < 5 {
+			continue
 		}
+
+		funcName := strings.TrimSpace(match[1])
+		isAsync := strings.TrimSpace(match[2]) == "async"
+		params := strings.TrimSpace(match[3])
+		body := strings.TrimSpace(match[4])
+
+		// Ignorar si es el componente principal o usa hooks
+		if funcName == componentName ||
+			strings.Contains(body, "useState") ||
+			strings.Contains(body, "useEffect") {
+			continue
+		}
+
+		cleanBody := t.cleanFunctionBody(body)
+
+		functions = append(functions, FunctionDefinition{
+			Name:   funcName,
+			Async:  isAsync,
+			Params: params,
+			Body:   cleanBody,
+		})
 	}
 
 	return functions

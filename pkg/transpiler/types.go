@@ -30,7 +30,8 @@ type EffectDefinition struct {
 }
 
 type FunctionDefinition struct {
-	Name  string
-	Body  string
-	Async bool
+	Name   string
+	Body   string
+	Async  bool
+	Params string
 }

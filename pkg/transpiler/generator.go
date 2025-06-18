@@ -66,7 +66,7 @@ func (t *Transpiler) generateSvelteCode(component *ReactComponent, processedJSX 
 			if fn.Async {
 				asyncPrefix = "async "
 			}
-			result.WriteString(fmt.Sprintf("  %sfunction %s() {\n", asyncPrefix, fn.Name))
+			result.WriteString(fmt.Sprintf("  %sfunction %s%s {\n", asyncPrefix, fn.Name, fn.Params))
 
 			// Indentar el cuerpo de la función
 			bodyLines := strings.Split(strings.TrimSpace(fn.Body), "\n")
