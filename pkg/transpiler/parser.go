@@ -452,33 +452,41 @@ func (t *Transpiler) replaceLoops(jsx string) string {
 		return fmt.Sprintf("\n{#each %s as %s%s%s}\n%s\n{/each}\n", collection, item, indexPart, keyPart, body)
 	})
 }
-
 func (t *Transpiler) replaceConditionals(jsx string) string {
 	// 1. Ternario
 	ternaryRegex := regexp.MustCompile(`\{\s*([^{}?]+?)\s*\?\s*\(([\s\S]+?)\)\s*:\s*\(([\s\S]+?)\)\s*\}`)
 	jsx = ternaryRegex.ReplaceAllString(jsx, "\n{#if $1}\n$2\n{:else}\n$3\n{/if}\n")
 
-	// 2. && con paréntesis multilínea
+	// 2. && con paréntesis multilínea (ya balanceado)
 	andBlockRegex := regexp.MustCompile(`\{\s*([^{}]+?)\s*&&\s*\(\s*([\s\S]+?)\s*\)\s*\}`)
 	jsx = andBlockRegex.ReplaceAllStringFunc(jsx, func(match string) string {
 		m := andBlockRegex.FindStringSubmatch(match)
 		if len(m) < 3 {
 			return match
 		}
-		return fmt.Sprintf("\n{#if %s}\n%s\n{/if}\n", strings.TrimSpace(m[1]), strings.TrimSpace(m[2]))
+		condition := strings.TrimSpace(m[1])
+		content := strings.TrimSpace(m[2])
+		return fmt.Sprintf("\n{#if %s}\n%s\n{/if}\n", condition, content)
 	})
 
-	// 3. && con JSX inline (como <Shield ... /> o <Tag></Tag>)
-	andInlineJSXRegex := regexp.MustCompile(`\{\s*([^{}]+?)\s*&&\s*(<[^>]+/?>)\s*\}`)
-	jsx = andInlineJSXRegex.ReplaceAllStringFunc(jsx, func(match string) string {
-		m := andInlineJSXRegex.FindStringSubmatch(match)
-		if len(m) < 3 {
-			return match
-		}
-		return fmt.Sprintf("\n{#if %s}\n%s\n{/if}\n", strings.TrimSpace(m[1]), strings.TrimSpace(m[2]))
-	})
+	// 3. && inline sin paréntesis (auto-cerrado o <Tag>...</Tag> en una línea)
+	jsx = processInlineConditionals(jsx)
 
 	return jsx
+}
+
+func processInlineConditionals(code string) string {
+	pattern := regexp.MustCompile(`\{\s*([a-zA-Z0-9_.!?]+)\s*&&\s*(<[^}]+>)\s*\}`)
+	return pattern.ReplaceAllStringFunc(code, func(match string) string {
+		sub := pattern.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+		condition := strings.TrimSpace(sub[1])
+		content := strings.TrimSpace(sub[2])
+
+		return fmt.Sprintf("\n{#if %s}\n%s\n{/if}\n", condition, content)
+	})
 }
 
 func (t *Transpiler) replaceEvents(jsx string) string {
