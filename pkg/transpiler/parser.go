@@ -406,6 +406,44 @@ func (t *Transpiler) processJSX(jsx string) (string, error) {
 	// Convertir className a class
 	processed = regexp.MustCompile(`className=`).ReplaceAllString(processed, `class=`)
 
+	processed = t.deleteFragments(processed)
+
+	processed = t.replaceEvents(processed)
+
+	processed = t.replaceConditionals(processed)
+
+	return processed, nil
+}
+
+func (t *Transpiler) replaceConditionals(jsx string) string {
+	// 1. Ternario
+	ternaryRegex := regexp.MustCompile(`\{\s*([^{}?]+?)\s*\?\s*\(([\s\S]+?)\)\s*:\s*\(([\s\S]+?)\)\s*\}`)
+	jsx = ternaryRegex.ReplaceAllString(jsx, "\n{#if $1}\n$2\n{:else}\n$3\n{/if}\n")
+
+	// 2. && con paréntesis multilínea
+	andBlockRegex := regexp.MustCompile(`\{\s*([^{}]+?)\s*&&\s*\(\s*([\s\S]+?)\s*\)\s*\}`)
+	jsx = andBlockRegex.ReplaceAllStringFunc(jsx, func(match string) string {
+		m := andBlockRegex.FindStringSubmatch(match)
+		if len(m) < 3 {
+			return match
+		}
+		return fmt.Sprintf("\n{#if %s}\n%s\n{/if}\n", strings.TrimSpace(m[1]), strings.TrimSpace(m[2]))
+	})
+
+	// 3. && con JSX inline (como <Shield ... /> o <Tag></Tag>)
+	andInlineJSXRegex := regexp.MustCompile(`\{\s*([^{}]+?)\s*&&\s*(<[^>]+/?>)\s*\}`)
+	jsx = andInlineJSXRegex.ReplaceAllStringFunc(jsx, func(match string) string {
+		m := andInlineJSXRegex.FindStringSubmatch(match)
+		if len(m) < 3 {
+			return match
+		}
+		return fmt.Sprintf("\n{#if %s}\n%s\n{/if}\n", strings.TrimSpace(m[1]), strings.TrimSpace(m[2]))
+	})
+
+	return jsx
+}
+
+func (t *Transpiler) replaceEvents(jsx string) string {
 	// Convertir onClick a onclick (y otros eventos)
 	eventMap := map[string]string{
 		"onClick":     "onclick",
@@ -419,17 +457,23 @@ func (t *Transpiler) processJSX(jsx string) (string, error) {
 		"onMouseOut":  "onmouseout",
 	}
 
+	processed := jsx
+
 	for reactEvent, svelteEvent := range eventMap {
 		processed = regexp.MustCompile(reactEvent+`=`).ReplaceAllString(processed, svelteEvent+`=`)
 	}
 
+	return processed
+}
+
+func (t *Transpiler) deleteFragments(jsx string) string {
 	// Convertir fragmentos <React.Fragment> o <> a elementos div (simplificación)
-	processed = regexp.MustCompile(`<React\.Fragment[^>]*>`).ReplaceAllString(processed, `<div>`)
+	processed := regexp.MustCompile(`<React\.Fragment[^>]*>`).ReplaceAllString(jsx, `<div>`)
 	processed = regexp.MustCompile(`</React\.Fragment>`).ReplaceAllString(processed, `</div>`)
 	processed = regexp.MustCompile(`<>`).ReplaceAllString(processed, `<div>`)
 	processed = regexp.MustCompile(`</>`).ReplaceAllString(processed, `</div>`)
 
-	return processed, nil
+	return processed
 }
 
 func (t *Transpiler) replaceComments(jsx string) string {
