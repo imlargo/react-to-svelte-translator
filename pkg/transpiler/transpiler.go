@@ -25,8 +25,6 @@ func (t *Transpiler) TranspileComponent(reactCode string) (string, error) {
 		return "", fmt.Errorf("error parseando código React: %v", err)
 	}
 
-	fmt.Println(jsxContent)
-
 	// Procesar el JSX
 	component.JSXContent = jsxContent
 	processedJSX, err := t.processJSX(jsxContent)

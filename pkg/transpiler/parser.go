@@ -64,7 +64,22 @@ func (t *Transpiler) parseReactCode(jsCode string) (*ReactComponent, error) {
 func (t *Transpiler) extractImports(code string) []string {
 	importRegex := regexp.MustCompile(`import\s+.*?from\s+['"].*?['"]`)
 	matches := importRegex.FindAllString(code, -1)
-	return matches
+
+	var cleanImports []string
+	for _, match := range matches {
+		isReactImport := strings.Contains(match, "react") || strings.Contains(match, "React")
+		isNextImport := false
+		if strings.Contains(match, "next") || strings.Contains(match, "Next") {
+			nextImportRegex := regexp.MustCompile(`from\s+['"]next[\/\w-]*['"]`)
+			isNextImport = nextImportRegex.MatchString(match)
+		}
+
+		if !isReactImport && !isNextImport {
+			cleanImports = append(cleanImports, match)
+		}
+	}
+
+	return cleanImports
 }
 
 // Extraer props
