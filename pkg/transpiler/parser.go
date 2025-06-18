@@ -81,23 +81,26 @@ func (t *Transpiler) extractImports(code string) []string {
 
 	return cleanImports
 }
-
-// Extraer props
 func (t *Transpiler) extractProps(code string) []PropDefinition {
 	var props []PropDefinition
+	propsMap := make(map[string]bool) // Para evitar duplicados
 
-	// Buscar destructuring de props: const { prop1, prop2 } = props
-	propsRegex := regexp.MustCompile(`const\s*{\s*([^}]+)\s*}\s*=\s*props`)
-	matches := propsRegex.FindStringSubmatch(code)
+	// 1. Destructuring directo en parámetros de la función
+	paramRegex := regexp.MustCompile(`function\s+\w+\s*\(\s*{\s*([^}]+)\s*}\s*(?::\s*(\w+Props))?\s*\)`)
+	paramMatches := paramRegex.FindStringSubmatch(code)
 
-	if len(matches) > 1 {
-		propsList := strings.Split(matches[1], ",")
+	if len(paramMatches) > 1 {
+		propsList := strings.Split(paramMatches[1], ",")
 		for _, prop := range propsList {
 			prop = strings.TrimSpace(prop)
 
-			// Manejar props con valores por defecto: prop = defaultValue
+			if prop == "" {
+				continue
+			}
+
+			// Manejar default value
 			if strings.Contains(prop, "=") {
-				parts := strings.Split(prop, "=")
+				parts := strings.SplitN(prop, "=", 2)
 				propName := strings.TrimSpace(parts[0])
 				defaultValue := strings.TrimSpace(parts[1])
 				props = append(props, PropDefinition{
@@ -106,17 +109,58 @@ func (t *Transpiler) extractProps(code string) []PropDefinition {
 					DefaultValue: defaultValue,
 					Optional:     true,
 				})
+				propsMap[propName] = true
 			} else {
 				props = append(props, PropDefinition{
 					Name:     prop,
 					Type:     "any",
 					Optional: false,
 				})
+				propsMap[prop] = true
 			}
 		}
 	}
 
-	// También buscar interface/type para props
+	// 2. Destructuring de props dentro del cuerpo: const { x, y = z } = props;
+	propsRegex := regexp.MustCompile(`const\s*{\s*([^}]+)\s*}\s*=\s*props`)
+	matches := propsRegex.FindStringSubmatch(code)
+
+	if len(matches) > 1 {
+		propsList := strings.Split(matches[1], ",")
+		for _, prop := range propsList {
+			prop = strings.TrimSpace(prop)
+
+			if prop == "" {
+				continue
+			}
+
+			if strings.Contains(prop, "=") {
+				parts := strings.SplitN(prop, "=", 2)
+				propName := strings.TrimSpace(parts[0])
+				defaultValue := strings.TrimSpace(parts[1])
+				if !propsMap[propName] {
+					props = append(props, PropDefinition{
+						Name:         propName,
+						Type:         "any",
+						DefaultValue: defaultValue,
+						Optional:     true,
+					})
+					propsMap[propName] = true
+				}
+			} else {
+				if !propsMap[prop] {
+					props = append(props, PropDefinition{
+						Name:     prop,
+						Type:     "any",
+						Optional: false,
+					})
+					propsMap[prop] = true
+				}
+			}
+		}
+	}
+
+	// 3. Interface o type definition: interface MyProps { a: string; b?: number }
 	interfaceRegex := regexp.MustCompile(`(?:interface|type)\s+(\w+Props)\s*{\s*([^}]+)\s*}`)
 	interfaceMatches := interfaceRegex.FindStringSubmatch(code)
 
@@ -130,16 +174,23 @@ func (t *Transpiler) extractProps(code string) []PropDefinition {
 				continue
 			}
 
-			// Parsear prop: name: type; o name?: type;
-			propRegex := regexp.MustCompile(`(\w+)(\??):\s*([^;]+)`)
+			// Ejemplo: name?: string;
+			propRegex := regexp.MustCompile(`^(\w+)(\??):\s*([^;]+);?$`)
 			propMatch := propRegex.FindStringSubmatch(line)
 
 			if len(propMatch) > 3 {
-				props = append(props, PropDefinition{
-					Name:     propMatch[1],
-					Type:     strings.TrimSpace(propMatch[3]),
-					Optional: propMatch[2] == "?",
-				})
+				name := propMatch[1]
+				optional := propMatch[2] == "?"
+				typ := strings.TrimSpace(propMatch[3])
+
+				if !propsMap[name] {
+					props = append(props, PropDefinition{
+						Name:     name,
+						Type:     typ,
+						Optional: optional,
+					})
+					propsMap[name] = true
+				}
 			}
 		}
 	}
