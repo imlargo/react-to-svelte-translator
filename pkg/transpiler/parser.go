@@ -401,7 +401,7 @@ func (t *Transpiler) processJSX(jsx string) (string, error) {
 	}
 
 	// Convertir sintaxis de JSX a Svelte
-	processed := jsx
+	processed := t.replaceComments(jsx)
 
 	// Convertir className a class
 	processed = regexp.MustCompile(`className=`).ReplaceAllString(processed, `class=`)
@@ -430,4 +430,20 @@ func (t *Transpiler) processJSX(jsx string) (string, error) {
 	processed = regexp.MustCompile(`</>`).ReplaceAllString(processed, `</div>`)
 
 	return processed, nil
+}
+
+func (t *Transpiler) replaceComments(jsx string) string {
+	// 1. Convertir comentarios JSX a comentarios HTML
+	jsxCommentRegex := regexp.MustCompile(`\{\s*/\*\s*(.*?)\s*\*/\s*\}`)
+	jsx = jsxCommentRegex.ReplaceAllString(jsx, `<!-- $1 -->`)
+
+	// 2. Eliminar comentarios de línea JS (// ...) que no están en JSX
+	singleLineCommentRegex := regexp.MustCompile(`(?m)^\s*//.*$`)
+	jsx = singleLineCommentRegex.ReplaceAllString(jsx, ``)
+
+	// 3. Eliminar comentarios de bloque JS (/* ... */)
+	blockCommentRegex := regexp.MustCompile(`(?s)/\*.*?\*/`)
+	jsx = blockCommentRegex.ReplaceAllString(jsx, ``)
+
+	return jsx
 }
