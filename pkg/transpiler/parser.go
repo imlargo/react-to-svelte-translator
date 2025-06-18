@@ -410,9 +410,47 @@ func (t *Transpiler) processJSX(jsx string) (string, error) {
 
 	processed = t.replaceEvents(processed)
 
+	processed = t.replaceLoops(processed)
+
 	processed = t.replaceConditionals(processed)
 
 	return processed, nil
+}
+
+func (t *Transpiler) replaceLoops(jsx string) string {
+	mapRegex := regexp.MustCompile(`\{\s*([a-zA-Z0-9_.$]+)\.map\s*\(\s*\(?\s*([a-zA-Z0-9_]+)\s*(?:,\s*([a-zA-Z0-9_]+))?\s*\)?\s*=>\s*\(\s*([\s\S]+?)\s*\)\s*\)\s*\}`)
+
+	return mapRegex.ReplaceAllStringFunc(jsx, func(match string) string {
+		m := mapRegex.FindStringSubmatch(match)
+		if len(m) < 5 {
+			return match
+		}
+
+		collection := strings.TrimSpace(m[1]) // ej: packages
+		item := strings.TrimSpace(m[2])       // ej: pkg
+		index := strings.TrimSpace(m[3])      // ej: i (opcional)
+		body := strings.TrimSpace(m[4])       // JSX
+		key := ""
+
+		// Buscar key
+		keyRegex := regexp.MustCompile(`key\s*=\s*\{([^}]+)\}`)
+		if keyMatch := keyRegex.FindStringSubmatch(body); len(keyMatch) > 1 {
+			key = strings.TrimSpace(keyMatch[1])
+			body = keyRegex.ReplaceAllString(body, "") // eliminar key del JSX
+		}
+
+		indexPart := ""
+		if index != "" {
+			indexPart = ", " + index
+		}
+
+		keyPart := ""
+		if key != "" {
+			keyPart = fmt.Sprintf(" (%s)", key)
+		}
+
+		return fmt.Sprintf("\n{#each %s as %s%s%s}\n%s\n{/each}\n", collection, item, indexPart, keyPart, body)
+	})
 }
 
 func (t *Transpiler) replaceConditionals(jsx string) string {
