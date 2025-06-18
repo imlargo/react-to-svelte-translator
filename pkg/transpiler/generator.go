@@ -12,6 +12,16 @@ func (t *Transpiler) generateSvelteCode(component *ReactComponent, processedJSX 
 	// Script tag
 	result.WriteString("<script lang=\"ts\">\n")
 
+	// Imports
+	if len(component.Imports) > 0 {
+		for _, imp := range component.Imports {
+			imp = strings.ReplaceAll(imp, ".jsx", ".svelte")
+			imp = strings.ReplaceAll(imp, ".tsx", ".svelte")
+			result.WriteString(fmt.Sprintf("  %s\n", imp))
+		}
+		result.WriteString("\n")
+	}
+
 	// Props
 	if len(component.Props) > 0 {
 		result.WriteString("  // Props\n")
