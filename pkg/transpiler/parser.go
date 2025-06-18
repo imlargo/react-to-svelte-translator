@@ -249,39 +249,61 @@ func (t *Transpiler) extractEffects(code string) []EffectDefinition {
 
 func (t *Transpiler) extractFunctions(code string) []FunctionDefinition {
 	var functions []FunctionDefinition
-
-	// Regex: nombre, async?, params, cuerpo (nivel simple)
-	funcRegex := regexp.MustCompile(
-		`const\s+(\w+)\s*=\s*(async\s*)?(\([^\)]*\)|\w+)\s*=>\s*{((?:[^{}]*|\{[^{}]*\})*)}`,
-	)
-
-	matches := funcRegex.FindAllStringSubmatch(code, -1)
 	componentName := t.extractComponentName(code)
 
-	for _, match := range matches {
+	// --- 1. Funciones flecha ---
+	arrowFuncRegex := regexp.MustCompile(
+		`const\s+(\w+)\s*=\s*(async\s*)?(\([^\)]*\)|\w+)\s*=>\s*{((?:[^{}]*|\{[^{}]*\})*)}`,
+	)
+	arrowMatches := arrowFuncRegex.FindAllStringSubmatch(code, -1)
+
+	for _, match := range arrowMatches {
 		if len(match) < 5 {
 			continue
 		}
-
 		funcName := strings.TrimSpace(match[1])
 		isAsync := strings.TrimSpace(match[2]) == "async"
 		params := strings.TrimSpace(match[3])
 		body := strings.TrimSpace(match[4])
 
-		// Ignorar si es el componente principal o usa hooks
-		if funcName == componentName ||
-			strings.Contains(body, "useState") ||
-			strings.Contains(body, "useEffect") {
+		// Ignorar componente principal y funciones con hooks
+		if funcName == componentName || strings.Contains(body, "useState") || strings.Contains(body, "useEffect") {
 			continue
 		}
 
-		cleanBody := t.cleanFunctionBody(body)
-
+		clean := t.cleanFunctionBody(body)
 		functions = append(functions, FunctionDefinition{
 			Name:   funcName,
 			Async:  isAsync,
 			Params: params,
-			Body:   cleanBody,
+			Body:   clean,
+		})
+	}
+
+	// --- 2. Funciones clásicas (incluyendo async) ---
+	funcDeclRegex := regexp.MustCompile(`(async\s+)?function\s+(\w+)\s*(\([^\)]*\))\s*{((?:[^{}]*|\{[^{}]*\})*)}`)
+	funcMatches := funcDeclRegex.FindAllStringSubmatch(code, -1)
+
+	for _, match := range funcMatches {
+		if len(match) < 5 {
+			continue
+		}
+		isAsync := strings.TrimSpace(match[1]) == "async"
+		funcName := strings.TrimSpace(match[2])
+		params := strings.TrimSpace(match[3])
+		body := strings.TrimSpace(match[4])
+
+		// Ignorar componente principal y funciones con hooks
+		if funcName == componentName || strings.Contains(body, "useState") || strings.Contains(body, "useEffect") {
+			continue
+		}
+
+		clean := t.cleanFunctionBody(body)
+		functions = append(functions, FunctionDefinition{
+			Name:   funcName,
+			Async:  isAsync,
+			Params: params,
+			Body:   clean,
 		})
 	}
 
