@@ -283,34 +283,94 @@ func (t *Transpiler) extractFunctions(code string) []FunctionDefinition {
 	return functions
 }
 
-// Limpiar el cuerpo de funciones de código React
 func (t *Transpiler) cleanFunctionBody(body string) string {
-	// Remover useState calls
+	// Eliminar useState
 	body = regexp.MustCompile(`const\s*\[[^]]+\]\s*=\s*useState\([^)]*\);\s*`).ReplaceAllString(body, "")
 
-	// Convertir setStateName calls a assignments
-	// setCount(value) -> count = value
-	setStateRegex := regexp.MustCompile(`set([A-Z]\w*)\(([^)]+)\)`)
-	body = setStateRegex.ReplaceAllStringFunc(body, func(match string) string {
-		submatches := setStateRegex.FindStringSubmatch(match)
-		if len(submatches) > 2 {
-			stateName := strings.ToLower(string(submatches[1][0])) + submatches[1][1:]
-			value := submatches[2]
-			return fmt.Sprintf("%s = %s", stateName, value)
-		}
-		return match
-	})
+	// Detectar y convertir setters
+	setCalls := t.extractSetterCalls(body)
+	for _, call := range setCalls {
+		converted := t.convertSetterCall(call)
+		body = strings.Replace(body, call, converted, 1)
+	}
 
-	// Limpiar líneas vacías extra
+	// Limpiar líneas vacías
 	lines := strings.Split(body, "\n")
 	var cleanLines []string
 	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
 			cleanLines = append(cleanLines, line)
 		}
 	}
 
 	return strings.Join(cleanLines, "\n")
+}
+
+func (t *Transpiler) convertSetterCall(call string) string {
+	setStateRegex := regexp.MustCompile(`^set([A-Z]\w*)\s*\(\s*((?s).*?)\s*\)$`)
+	submatches := setStateRegex.FindStringSubmatch(strings.TrimSpace(call))
+	if len(submatches) < 3 {
+		return call
+	}
+
+	setter := submatches[1]
+	rawValue := strings.TrimSpace(submatches[2])
+	stateVar := strings.ToLower(setter[:1]) + setter[1:]
+
+	// Ver si el valor es una función flecha tipo (prev) => ({ ... })
+	if strings.HasPrefix(rawValue, "(") && strings.Contains(rawValue, "=>") {
+		// Separar en partes: (prev) => ({...})
+		parts := strings.SplitN(rawValue, "=>", 2)
+		body := strings.TrimSpace(parts[1])
+
+		// Eliminar paréntesis externos si los hay
+		if strings.HasPrefix(body, "(") && strings.HasSuffix(body, ")") {
+			body = strings.TrimPrefix(body, "(")
+			body = strings.TrimSuffix(body, ")")
+		}
+
+		// Reemplazar "prev" o argumento por el estado real
+		body = strings.ReplaceAll(body, "prev", stateVar)
+
+		return fmt.Sprintf("%s = %s", stateVar, strings.TrimSpace(body))
+	}
+
+	// Si no es función flecha, devolver como asignación directa
+	return fmt.Sprintf("%s = %s", stateVar, rawValue)
+}
+
+func (t *Transpiler) extractSetterCalls(code string) []string {
+	var results []string
+
+	// Buscar todas las ocurrencias de "setX("
+	baseRegex := regexp.MustCompile(`set([A-Z]\w*)\s*\(`)
+	indexes := baseRegex.FindAllStringIndex(code, -1)
+
+	for _, idx := range indexes {
+		start := idx[0]
+		i := idx[1] // posición después del paréntesis de apertura
+
+		openParens := 1
+		end := i
+
+		for end < len(code) && openParens > 0 {
+			c := code[end]
+			switch c {
+			case '(':
+				openParens++
+			case ')':
+				openParens--
+			}
+			end++
+		}
+
+		if openParens == 0 {
+			call := code[start:end]
+			results = append(results, call)
+		}
+	}
+
+	return results
 }
 
 // Extraer nombre del componente
