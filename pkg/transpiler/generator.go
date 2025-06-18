@@ -52,7 +52,12 @@ func (t *Transpiler) generateSvelteCode(component *ReactComponent, processedJSX 
 	if len(component.Functions) > 0 {
 		result.WriteString("  // Functions\n")
 		for _, fn := range component.Functions {
-			result.WriteString(fmt.Sprintf("  function %s() {\n", fn.Name))
+			asyncPrefix := ""
+			if fn.Async {
+				asyncPrefix = "async "
+			}
+			result.WriteString(fmt.Sprintf("  %sfunction %s() {\n", asyncPrefix, fn.Name))
+
 			// Indentar el cuerpo de la función
 			bodyLines := strings.Split(strings.TrimSpace(fn.Body), "\n")
 			for _, line := range bodyLines {

@@ -247,32 +247,34 @@ func (t *Transpiler) extractEffects(code string) []EffectDefinition {
 	return effects
 }
 
-// Extraer funciones
 func (t *Transpiler) extractFunctions(code string) []FunctionDefinition {
 	var functions []FunctionDefinition
 
-	// Buscar funciones arrow dentro del componente: const functionName = () => { ... }
-	// Pero excluir el componente principal
-	funcRegex := regexp.MustCompile(`const\s+(\w+)\s*=\s*\([^)]*\)\s*=>\s*{([\s\S]*?)}`)
+	// Regex para detectar funciones flecha, con async opcional, parámetros con o sin paréntesis
+	funcRegex := regexp.MustCompile(`const\s+(\w+)\s*=\s*(async\s*)?(?:\([^\)]*\)|\w+)\s*=>\s*{((?:[^{}]*|\{[^{}]*\})*)}`)
+
 	matches := funcRegex.FindAllStringSubmatch(code, -1)
 
+	// Obtener el nombre del componente principal para excluirlo
 	componentName := t.extractComponentName(code)
 
 	for _, match := range matches {
-		if len(match) > 2 {
+		if len(match) > 3 {
 			funcName := match[1]
-			funcBody := match[2]
+			isAsync := strings.TrimSpace(match[2]) == "async"
+			funcBody := match[3]
 
-			// Excluir el componente principal y funciones que contengan hooks
+			// Excluir componente principal y funciones con hooks
 			if funcName != componentName &&
 				!strings.Contains(funcBody, "useState") &&
 				!strings.Contains(funcBody, "useEffect") {
 
-				// Limpiar el cuerpo de la función de hooks de React
 				cleanBody := t.cleanFunctionBody(funcBody)
+
 				functions = append(functions, FunctionDefinition{
-					Name: funcName,
-					Body: cleanBody,
+					Name:  funcName,
+					Body:  cleanBody,
+					Async: isAsync,
 				})
 			}
 		}
