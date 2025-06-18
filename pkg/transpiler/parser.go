@@ -203,7 +203,7 @@ func (t *Transpiler) extractStates(code string) []StateDefinition {
 	var states []StateDefinition
 
 	// Buscar useState hooks: const [stateName, setStateName] = useState(initialValue)
-	stateRegex := regexp.MustCompile(`const\s*\[\s*(\w+)\s*,\s*set\w+\s*\]\s*=\s*useState\s*\(\s*([^)]*)\s*\)`)
+	stateRegex := regexp.MustCompile(`const\s*\[\s*(\w+)\s*,\s*set\w+\s*\]\s*=\s*useState\s*\(\s*((?:[^()]|\([^()]*\))*)\s*\)`)
 	matches := stateRegex.FindAllStringSubmatch(code, -1)
 
 	for _, match := range matches {
